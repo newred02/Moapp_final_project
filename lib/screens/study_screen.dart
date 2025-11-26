@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../widgets/app_bar_widget.dart';
 import '../widgets/progress_ring.dart';
 import '../data/subjects_data.dart';
 
