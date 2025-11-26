@@ -17,6 +17,8 @@ class MainLayout extends StatefulWidget {
 }
 
 class _MainLayoutState extends State<MainLayout> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   int _getCurrentIndex() {
     if (widget.currentPath == '/') return 0;
     if (widget.currentPath.startsWith('/study')) return 1;
@@ -35,6 +37,7 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(60),
         child: Container(
@@ -93,7 +96,7 @@ class _MainLayoutState extends State<MainLayout> {
                       size: 24,
                     ),
                     onPressed: () {
-                      Scaffold.of(context).openDrawer();
+                      _scaffoldKey.currentState?.openEndDrawer();
                     },
                   ),
                 ],
@@ -102,7 +105,7 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ),
       ),
-      drawer: Drawer(
+      endDrawer: Drawer(
         child: Container(
           color: const Color(0xFFFAFAFA),
           child: Column(
