@@ -35,6 +35,22 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  # Navigation
+  go_router: ^14.3.0
+
+  # Icons
+  heroicons: ^0.9.0
+
+  # Utilities
+  collection: ^1.18.0
+
+  # Speech
+  speech_to_text: ^7.0.0
+  flutter_tts: ^4.0.2
+
+  # Permissions
+  permission_handler: ^11.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
