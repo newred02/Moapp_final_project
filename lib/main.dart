@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'screens/home_screen.dart';
 import 'screens/study_screen.dart';
 import 'screens/study_detail_screen.dart';
 import 'screens/interview_screen.dart';
+import 'screens/interview_result_screen.dart';
 import 'screens/feedback_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/help_screen.dart';
 import 'widgets/main_layout.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   runApp(CSInterviewApp());
 }
 
@@ -48,6 +52,20 @@ class CSInterviewApp extends StatelessWidget {
           currentPath: state.uri.path,
           child: const InterviewScreen(),
         ),
+      ),
+      GoRoute(
+        path: '/interview/result',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return MainLayout(
+            currentPath: state.uri.path,
+            child: InterviewResultScreen(
+              question: extra?['question'] ?? '',
+              answer: extra?['answer'] ?? '',
+              questionType: extra?['questionType'] ?? '기술면접',
+            ),
+          );
+        },
       ),
       GoRoute(
         path: '/feedback',
