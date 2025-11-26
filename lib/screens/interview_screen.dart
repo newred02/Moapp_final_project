@@ -605,7 +605,14 @@ class _InterviewScreenState extends State<InterviewScreen>
         if (_recordedText.isNotEmpty)
           GradientButton(
             text: '답변 완료 & 피드백 받기',
-            onPressed: () => context.push('/feedback'),
+            onPressed: () => context.push(
+              '/interview/result',
+              extra: {
+                'question': currentQuestion!.question,
+                'answer': _recordedText,
+                'questionType': selectedType,
+              },
+            ),
             width: double.infinity,
             colors: const [Color(0xFF8B5CF6), Color(0xFFEC4899)],
           )
