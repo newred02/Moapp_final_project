@@ -68,13 +68,11 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: const AppBarWidget(
-        title: '피드백 제출',
-        showBackButton: true,
-      ),
-      body: SingleChildScrollView(
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: const Color(0xFFF8FAFC),
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
