@@ -20,21 +20,21 @@ class CSInterviewApp extends StatelessWidget {
       GoRoute(
         path: '/',
         builder: (context, state) => MainLayout(
-          currentPath: state.location,
+          currentPath: state.uri.path,
           child: const HomeScreen(),
         ),
       ),
       GoRoute(
         path: '/study',
         builder: (context, state) => MainLayout(
-          currentPath: state.location,
+          currentPath: state.uri.path,
           child: const StudyScreen(),
         ),
       ),
       GoRoute(
         path: '/study/:id',
         builder: (context, state) => MainLayout(
-          currentPath: state.location,
+          currentPath: state.uri.path,
           child: StudyDetailScreen(
             id: state.pathParameters['id']!,
           ),
@@ -43,14 +43,14 @@ class CSInterviewApp extends StatelessWidget {
       GoRoute(
         path: '/interview',
         builder: (context, state) => MainLayout(
-          currentPath: state.location,
+          currentPath: state.uri.path,
           child: const InterviewScreen(),
         ),
       ),
       GoRoute(
         path: '/feedback',
         builder: (context, state) => MainLayout(
-          currentPath: state.location,
+          currentPath: state.uri.path,
           child: const FeedbackScreen(),
         ),
       ),
