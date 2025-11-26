@@ -141,17 +141,11 @@ class _InterviewScreenState extends State<InterviewScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: const AppBarWidget(
-        title: '면접 연습',
-        showBackButton: true,
-        actions: [
-          Icon(Icons.settings, color: Color(0xFF6B7280)),
-          SizedBox(width: 16),
-        ],
-      ),
-      body: SingleChildScrollView(
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: const Color(0xFFF8FAFC),
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
