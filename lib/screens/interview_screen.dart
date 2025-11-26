@@ -4,6 +4,7 @@ import '../widgets/app_bar_widget.dart';
 import '../widgets/gradient_button.dart';
 import '../data/subjects_data.dart';
 import '../models/subject.dart';
+import '../services/speech_service.dart';
 import 'dart:math';
 
 class InterviewScreen extends StatefulWidget {
@@ -21,10 +22,14 @@ class _InterviewScreenState extends State<InterviewScreen>
   late AnimationController _recordingController;
   late Animation<double> _scaleAnimation;
   late Animation<double> _opacityAnimation;
+  late SpeechService _speechService;
+  String _recordedText = '';
+  bool _isProcessingAnswer = false;
 
   @override
   void initState() {
     super.initState();
+    _speechService = SpeechService();
     _recordingController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
@@ -48,6 +53,7 @@ class _InterviewScreenState extends State<InterviewScreen>
   @override
   void dispose() {
     _recordingController.dispose();
+    _speechService.dispose();
     super.dispose();
   }
 
@@ -58,20 +64,79 @@ class _InterviewScreenState extends State<InterviewScreen>
     final random = Random();
     setState(() {
       currentQuestion = questions[random.nextInt(questions.length)];
+      _recordedText = '';
+      _isProcessingAnswer = false;
     });
   }
 
-  void _toggleRecording() {
-    setState(() {
-      isRecording = !isRecording;
-    });
+  // TTS로 질문 읽기
+  Future<void> _speakQuestion() async {
+    if (currentQuestion != null) {
+      await _speechService.speak(currentQuestion!.question);
+    }
+  }
+
+  // STT 토글 (녹음 시작/중지)
+  Future<void> _toggleRecording() async {
+    if (!_speechService.speechEnabled) {
+      // 권한이 없으면 권한 요청
+      final granted = await _speechService.requestMicrophonePermission();
+      if (!granted) {
+        _showPermissionDialog();
+        return;
+      }
+    }
 
     if (isRecording) {
-      _recordingController.forward();
-    } else {
+      // 녹음 중지
+      await _speechService.stopListening();
+      setState(() {
+        isRecording = false;
+        _isProcessingAnswer = _recordedText.isNotEmpty;
+      });
       _recordingController.stop();
       _recordingController.reset();
+    } else {
+      // 녹음 시작
+      setState(() {
+        isRecording = true;
+        _recordedText = '';
+        _isProcessingAnswer = false;
+      });
+      _recordingController.forward();
+
+      await _speechService.startListening(
+        onResult: (text) {
+          setState(() {
+            _recordedText = text;
+          });
+        },
+      );
     }
+  }
+
+  // 권한 요청 다이얼로그
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('마이크 권한 필요'),
+        content: const Text('음성 녹음을 위해 마이크 권한이 필요합니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await _speechService.requestMicrophonePermission();
+            },
+            child: const Text('권한 허용'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -99,7 +164,11 @@ class _InterviewScreenState extends State<InterviewScreen>
               _buildQuestionCard(),
               const SizedBox(height: 32),
               _buildRecordingSection(),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+              if (_recordedText.isNotEmpty || _isProcessingAnswer) ...[
+                _buildAnswerSection(),
+                const SizedBox(height: 24),
+              ],
               _buildActionButtons(),
             ],
           ],
@@ -343,23 +412,37 @@ class _InterviewScreenState extends State<InterviewScreen>
           const SizedBox(height: 16),
           Row(
             children: [
-              IconButton(
-                onPressed: () {
-                  // TODO: TTS 기능 구현
+              AnimatedBuilder(
+                animation: _speechService,
+                builder: (context, child) {
+                  return IconButton(
+                    onPressed: _speechService.isSpeaking ? null : _speakQuestion,
+                    icon: Icon(
+                      _speechService.isSpeaking ? Icons.volume_off : Icons.volume_up,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFF3B82F6).withOpacity(0.1),
+                      foregroundColor: _speechService.isSpeaking
+                        ? Colors.grey
+                        : const Color(0xFF3B82F6),
+                    ),
+                  );
                 },
-                icon: const Icon(Icons.volume_up),
-                style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xFF3B82F6).withOpacity(0.1),
-                  foregroundColor: const Color(0xFF3B82F6),
-                ),
               ),
               const SizedBox(width: 8),
-              const Text(
-                '질문 듣기',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF6B7280),
-                ),
+              AnimatedBuilder(
+                animation: _speechService,
+                builder: (context, child) {
+                  return Text(
+                    _speechService.isSpeaking ? '질문 읽는 중...' : '질문 듣기',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: _speechService.isSpeaking
+                        ? const Color(0xFF3B82F6)
+                        : const Color(0xFF6B7280),
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -435,6 +518,87 @@ class _InterviewScreenState extends State<InterviewScreen>
     );
   }
 
+  Widget _buildAnswerSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            offset: const Offset(0, 2),
+            blurRadius: 10,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  '내 답변',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF10B981),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              if (_recordedText.isNotEmpty)
+                IconButton(
+                  onPressed: () async {
+                    await _speechService.speak(_recordedText);
+                  },
+                  icon: const Icon(Icons.volume_up, size: 20),
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981).withOpacity(0.1),
+                    foregroundColor: const Color(0xFF10B981),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_recordedText.isEmpty && isRecording)
+            const Text(
+              '음성을 인식하고 있습니다...',
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFF6B7280),
+                fontStyle: FontStyle.italic,
+              ),
+            )
+          else if (_recordedText.isEmpty && _isProcessingAnswer)
+            const Text(
+              '답변을 다시 녹음해주세요.',
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFFEF4444),
+              ),
+            )
+          else
+            Text(
+              _recordedText.isEmpty ? '아직 답변이 녹음되지 않았습니다.' : _recordedText,
+              style: TextStyle(
+                fontSize: 16,
+                color: _recordedText.isEmpty ? const Color(0xFF6B7280) : const Color(0xFF374151),
+                height: 1.5,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionButtons() {
     return Column(
       children: [
@@ -445,12 +609,31 @@ class _InterviewScreenState extends State<InterviewScreen>
           colors: const [Color(0xFF10B981), Color(0xFF059669)],
         ),
         const SizedBox(height: 16),
-        GradientButton(
-          text: '녹음 완료 & 피드백 받기',
-          onPressed: () => context.push('/feedback'),
-          width: double.infinity,
-          colors: const [Color(0xFF8B5CF6), Color(0xFFEC4899)],
-        ),
+        if (_recordedText.isNotEmpty)
+          GradientButton(
+            text: '답변 완료 & 피드백 받기',
+            onPressed: () => context.push('/feedback'),
+            width: double.infinity,
+            colors: const [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+          )
+        else
+          Container(
+            width: double.infinity,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: Text(
+                '답변을 녹음한 후 피드백을 받을 수 있습니다',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
