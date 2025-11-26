@@ -191,10 +191,7 @@ class _MainLayoutState extends State<MainLayout> {
                       title: '설정',
                       onTap: () {
                         Navigator.pop(context);
-                        // TODO: 설정 화면 구현
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('설정 화면은 준비 중입니다')),
-                        );
+                        context.go('/settings');
                       },
                     ),
                     _buildDrawerItem(
@@ -202,10 +199,7 @@ class _MainLayoutState extends State<MainLayout> {
                       title: '도움말',
                       onTap: () {
                         Navigator.pop(context);
-                        // TODO: 도움말 화면 구현
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('도움말 화면은 준비 중입니다')),
-                        );
+                        context.go('/help');
                       },
                     ),
                     _buildDrawerItem(
