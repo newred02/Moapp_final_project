@@ -5,6 +5,8 @@ import 'screens/study_screen.dart';
 import 'screens/study_detail_screen.dart';
 import 'screens/interview_screen.dart';
 import 'screens/feedback_screen.dart';
+import 'screens/settings_screen.dart';
+import 'screens/help_screen.dart';
 import 'widgets/main_layout.dart';
 
 void main() {
@@ -52,6 +54,20 @@ class CSInterviewApp extends StatelessWidget {
         builder: (context, state) => MainLayout(
           currentPath: state.uri.path,
           child: const FeedbackScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => MainLayout(
+          currentPath: state.uri.path,
+          child: const SettingsScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/help',
+        builder: (context, state) => MainLayout(
+          currentPath: state.uri.path,
+          child: const HelpScreen(),
         ),
       ),
     ],
