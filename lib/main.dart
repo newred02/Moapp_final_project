@@ -5,6 +5,7 @@ import 'screens/study_screen.dart';
 import 'screens/study_detail_screen.dart';
 import 'screens/interview_screen.dart';
 import 'screens/feedback_screen.dart';
+import 'widgets/main_layout.dart';
 
 void main() {
   runApp(CSInterviewApp());
@@ -18,25 +19,40 @@ class CSInterviewApp extends StatelessWidget {
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) => const HomeScreen(),
+        builder: (context, state) => MainLayout(
+          currentPath: state.location,
+          child: const HomeScreen(),
+        ),
       ),
       GoRoute(
         path: '/study',
-        builder: (context, state) => const StudyScreen(),
+        builder: (context, state) => MainLayout(
+          currentPath: state.location,
+          child: const StudyScreen(),
+        ),
       ),
       GoRoute(
         path: '/study/:id',
-        builder: (context, state) => StudyDetailScreen(
-          id: state.pathParameters['id']!,
+        builder: (context, state) => MainLayout(
+          currentPath: state.location,
+          child: StudyDetailScreen(
+            id: state.pathParameters['id']!,
+          ),
         ),
       ),
       GoRoute(
         path: '/interview',
-        builder: (context, state) => const InterviewScreen(),
+        builder: (context, state) => MainLayout(
+          currentPath: state.location,
+          child: const InterviewScreen(),
+        ),
       ),
       GoRoute(
         path: '/feedback',
-        builder: (context, state) => const FeedbackScreen(),
+        builder: (context, state) => MainLayout(
+          currentPath: state.location,
+          child: const FeedbackScreen(),
+        ),
       ),
     ],
   );
