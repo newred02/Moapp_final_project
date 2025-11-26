@@ -31,26 +31,18 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
   @override
   Widget build(BuildContext context) {
     if (subject == null) {
-      return Scaffold(
-        appBar: const AppBarWidget(
-          title: '학습',
-          showBackButton: true,
-        ),
-        body: const Center(
-          child: Text('과목을 찾을 수 없습니다.'),
-        ),
+      return const Center(
+        child: Text('과목을 찾을 수 없습니다.'),
       );
     }
 
     final currentSection = subject!.sections[currentSectionIndex];
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBarWidget(
-        title: subject!.name,
-        showBackButton: true,
-      ),
-      body: Column(
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: const Color(0xFFF8FAFC),
+      child: Column(
         children: [
           _buildProgressHeader(),
           Expanded(

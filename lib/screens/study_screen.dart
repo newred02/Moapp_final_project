@@ -9,13 +9,11 @@ class StudyScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: const AppBarWidget(
-        title: '전공지식 학습',
-        showBackButton: true,
-      ),
-      body: SingleChildScrollView(
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: const Color(0xFFF8FAFC),
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
