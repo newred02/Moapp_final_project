@@ -1,83 +1,111 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../data/subjects_data.dart';
 import '../models/subject.dart';
+import '../services/progress_service.dart';
 
 class StudyDetailScreen extends StatefulWidget {
-  final String id;
+  final Subject subject;
 
-  const StudyDetailScreen({super.key, required this.id});
+  const StudyDetailScreen({super.key, required this.subject});
 
   @override
   State<StudyDetailScreen> createState() => _StudyDetailScreenState();
 }
 
 class _StudyDetailScreenState extends State<StudyDetailScreen> {
-  Subject? subject;
   int currentSectionIndex = 0;
   int? selectedAnswer;
   bool showAnswer = false;
 
-  @override
-  void initState() {
-    super.initState();
-    subject = subjectsData.firstWhere(
-      (s) => s.id == widget.id,
-      orElse: () => subjectsData.first,
-    );
+  Future<void> _saveProgress(String sectionId) async {
+    try {
+      await ProgressService().markSectionComplete(
+        subjectId: widget.subject.id,
+        sectionId: sectionId,
+        totalSections: widget.subject.sections.length,
+      );
+    } catch (e) {
+      print('진행률 저장 실패: $e');
+    }
   }
 
-  @override
   Widget build(BuildContext context) {
-    if (subject == null) {
-      return const Center(
-        child: Text('과목을 찾을 수 없습니다.'),
-      );
-    }
+    final currentSection = widget.subject.sections[currentSectionIndex];
+    final user = FirebaseAuth.instance.currentUser;
 
-    final currentSection = subject!.sections[currentSectionIndex];
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user?.uid)
+          .collection('study_progress')
+          .doc(widget.subject.id)
+          .snapshots(),
+      builder: (context, snapshot) {
+        List<String> completedSections = [];
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+          if (data.containsKey('completedSections')) {
+            completedSections = List<String>.from(data['completedSections']);
+          }
+        }
 
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: const Color(0xFFF8FAFC),
-      child: Column(
-        children: [
-          _buildProgressHeader(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+        final double realProgress = completedSections.length / widget.subject.sections.length;
+        final bool isAlreadySolved = completedSections.contains(currentSection.id);
+
+        return Scaffold(
+          body: Container(
+            color: const Color(0xFFF8FAFC),
+            child: SafeArea(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionTitle(currentSection),
-                  const SizedBox(height: 24),
-                  _buildContentSection(currentSection),
-                  const SizedBox(height: 32),
-                  _buildQuizSection(currentSection),
-                  const SizedBox(height: 32),
+                  _buildProgressHeader(realProgress, currentSectionIndex + 1, widget.subject.sections.length),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.arrow_back),
+                                onPressed: () => context.pop(),
+                              ),
+                              Expanded(child: _buildSectionTitle(currentSection)),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          _buildContentSection(currentSection),
+                          const SizedBox(height: 32),
+                          _buildQuizSection(currentSection, isAlreadySolved),
+                          const SizedBox(height: 32),
+                        ],
+                      ),
+                    ),
+                  ),
+                  _buildBottomNavigation(isAlreadySolved),
                 ],
               ),
             ),
           ),
-          _buildBottomNavigation(),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildProgressHeader() {
-    final totalSections = subject!.sections.length;
-    final progress = (currentSectionIndex + 1) / totalSections;
-
+  Widget _buildProgressHeader(
+    double progress,
+    int currentStep,
+    int totalSteps,
+  ) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E7EB), width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB), width: 1)),
       ),
       child: Column(
         children: [
@@ -85,7 +113,7 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '${currentSectionIndex + 1} / $totalSections',
+                'Step $currentStep / $totalSteps',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -93,10 +121,11 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
                 ),
               ),
               Text(
-                '${(progress * 100).round()}% 완료',
+                '${(progress * 100).round()}% 진행 중',
                 style: const TextStyle(
                   fontSize: 14,
                   color: Color(0xFF6B7280),
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
@@ -105,9 +134,7 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
           LinearProgressIndicator(
             value: progress,
             backgroundColor: const Color(0xFFE5E7EB),
-            valueColor: const AlwaysStoppedAnimation<Color>(
-              Color(0xFF3B82F6),
-            ),
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
             minHeight: 6,
             borderRadius: BorderRadius.circular(3),
           ),
@@ -148,7 +175,10 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF3B82F6).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -178,7 +208,10 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
     );
   }
 
-  Widget _buildQuizSection(StudySection section) {
+  Widget _buildQuizSection(StudySection section, bool isAlreadySolved) {
+
+    final bool isSolvedState = showAnswer || isAlreadySolved;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -197,9 +230,13 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF10B981).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -213,6 +250,14 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
                   ),
                 ),
               ),
+              if (isAlreadySolved)
+                const Text(
+                  '✅ 학습 완료',
+                  style: TextStyle(
+                    color: Color(0xFF10B981),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 16),
@@ -228,24 +273,28 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
           ...section.quiz.options.asMap().entries.map((entry) {
             final index = entry.key;
             final option = entry.value;
-            final isSelected = selectedAnswer == index;
+            final bool isSelectedLocal = selectedAnswer == index;
             final isCorrect = index == section.quiz.correctAnswer;
+
+            final bool displaySelected = isSolvedState
+                ? isCorrect // 완료 상태면 정답에 체크 표시
+                : isSelectedLocal; // 아니면 내가 누른 것 표시
 
             Color backgroundColor = Colors.white;
             Color borderColor = const Color(0xFFE5E7EB);
             Color textColor = const Color(0xFF374151);
 
-            if (showAnswer) {
+            if (isSolvedState) {
               if (isCorrect) {
                 backgroundColor = const Color(0xFF10B981).withOpacity(0.1);
                 borderColor = const Color(0xFF10B981);
                 textColor = const Color(0xFF10B981);
-              } else if (isSelected) {
+              } else if (isSelectedLocal && !isCorrect && !isAlreadySolved) {
                 backgroundColor = const Color(0xFFEF4444).withOpacity(0.1);
                 borderColor = const Color(0xFFEF4444);
                 textColor = const Color(0xFFEF4444);
               }
-            } else if (isSelected) {
+            } else if (isSelectedLocal) {
               backgroundColor = const Color(0xFF3B82F6).withOpacity(0.1);
               borderColor = const Color(0xFF3B82F6);
               textColor = const Color(0xFF3B82F6);
@@ -254,11 +303,13 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: GestureDetector(
-                onTap: showAnswer ? null : () {
-                  setState(() {
-                    selectedAnswer = index;
-                  });
-                },
+                onTap: isSolvedState
+                    ? null
+                    : () {
+                        setState(() {
+                          selectedAnswer = index;
+                        });
+                      },
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -274,15 +325,14 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
                         height: 24,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: isSelected || (showAnswer && isCorrect)
-                              ? (showAnswer && isCorrect ? const Color(0xFF10B981) : const Color(0xFF3B82F6))
+                          color: displaySelected
+                              ? (isSolvedState
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFF3B82F6))
                               : Colors.transparent,
-                          border: Border.all(
-                            color: borderColor,
-                            width: 2,
-                          ),
+                          border: Border.all(color: borderColor, width: 2),
                         ),
-                        child: (isSelected || (showAnswer && isCorrect))
+                        child: displaySelected
                             ? const Icon(
                                 Icons.check,
                                 size: 16,
@@ -307,8 +357,11 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
               ),
             );
           }).toList(),
+
           const SizedBox(height: 20),
-          if (!showAnswer && selectedAnswer != null)
+
+          // 정답 확인 버튼
+          if (!isSolvedState && selectedAnswer != null)
             SizedBox(
               width: double.infinity,
               height: 48,
@@ -317,6 +370,19 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
                   setState(() {
                     showAnswer = true;
                   });
+
+                  if (selectedAnswer == section.quiz.correctAnswer) {
+                    // ★ 정답일 때만 저장 실행
+                    _saveProgress(section.id);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('정답입니다! 🎉')),
+                    );
+                  } else {
+                    // 오답일 때 피드백
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('오답입니다. 다시 시도해보세요!')),
+                    );
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF3B82F6),
@@ -327,14 +393,12 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
                 ),
                 child: const Text(
                   '정답 확인',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
-          if (showAnswer) ...[
+
+          if (isSolvedState) ...[
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -374,17 +438,17 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
     );
   }
 
-  Widget _buildBottomNavigation() {
+  Widget _buildBottomNavigation(bool isAlreadySolved) {
     final canGoPrevious = currentSectionIndex > 0;
-    final canGoNext = currentSectionIndex < subject!.sections.length - 1;
+    final canGoNext = currentSectionIndex < widget.subject.sections.length - 1;
+
+    final bool canProceed = showAnswer || isAlreadySolved;
 
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Color(0xFFE5E7EB), width: 1),
-        ),
+        border: Border(top: BorderSide(color: Color(0xFFE5E7EB), width: 1)),
       ),
       child: Row(
         children: [
@@ -419,15 +483,19 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
           if (canGoNext)
             Expanded(
               child: ElevatedButton(
-                onPressed: showAnswer ? () {
-                  setState(() {
-                    currentSectionIndex++;
-                    selectedAnswer = null;
-                    showAnswer = false;
-                  });
-                } : null,
+                onPressed: canProceed
+                    ? () {
+                        setState(() {
+                          currentSectionIndex++;
+                          selectedAnswer = null;
+                          showAnswer = false;
+                        });
+                      }
+                    : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: showAnswer ? const Color(0xFF3B82F6) : Colors.grey,
+                  backgroundColor: showAnswer
+                      ? const Color(0xFF3B82F6)
+                      : Colors.grey,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
@@ -436,10 +504,7 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
                 ),
                 child: const Text(
                   '다음 섹션',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -457,10 +522,7 @@ class _StudyDetailScreenState extends State<StudyDetailScreen> {
                 ),
                 child: const Text(
                   '학습 완료',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
             ),

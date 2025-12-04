@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -21,6 +23,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _pushNotification = true;
   bool _soundEffect = true;
 
+  Future<void> _resetLearningData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      // 로딩 표시
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final firestore = FirebaseFirestore.instance;
+      final progressRef = firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('study_progress');
+
+      // 컬렉션 안의 모든 문서 가져오기
+      final snapshots = await progressRef.get();
+
+      // Batch를 사용하여 한 번에 삭제 (효율적)
+      WriteBatch batch = firestore.batch();
+      for (var doc in snapshots.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      // 로딩 닫기
+      if (mounted) Navigator.pop(context);
+
+      // 성공 메시지
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('학습 데이터가 성공적으로 초기화되었습니다.')),
+        );
+      }
+    } catch (e) {
+      // 로딩 닫기
+      if (mounted) Navigator.pop(context);
+
+      // 에러 메시지
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('초기화 실패: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -30,11 +82,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFFEBF4FF),
-            Colors.white,
-            Color(0xFFF5F3FF),
-          ],
+          colors: [Color(0xFFEBF4FF), Colors.white, Color(0xFFF5F3FF)],
         ),
       ),
       child: SingleChildScrollView(
@@ -110,10 +158,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               const Text(
                 '음성 속도',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF374151),
-                ),
+                style: TextStyle(fontSize: 16, color: Color(0xFF374151)),
               ),
               Text(
                 '${(_speechSpeed * 100).round()}%',
@@ -256,15 +301,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   SizedBox(height: 4),
                   Text(
                     '하루 목표 학습 시간 설정',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF9CA3AF),
-                    ),
+                    style: TextStyle(fontSize: 14, color: Color(0xFF9CA3AF)),
                   ),
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF3F4F6),
                   borderRadius: BorderRadius.circular(8),
@@ -435,14 +480,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           _buildInfoRow('버전', 'v1.0.0'),
           const SizedBox(height: 16),
-          _buildInfoRow('마지막 업데이트', '2024.01.15'),
+          _buildInfoRow('마지막 업데이트', '2025.12.05'),
           const SizedBox(height: 16),
 
           GestureDetector(
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('최신 버전입니다')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('최신 버전입니다')));
             },
             child: Container(
               width: double.infinity,
@@ -454,11 +499,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.refresh,
-                    color: Color(0xFF3B82F6),
-                    size: 20,
-                  ),
+                  Icon(Icons.refresh, color: Color(0xFF3B82F6), size: 20),
                   SizedBox(width: 8),
                   Text(
                     '업데이트 확인',
@@ -508,7 +549,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 16),
-
           GestureDetector(
             onTap: () => _showResetConfirmDialog(),
             child: Container(
@@ -522,11 +562,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.restore,
-                    color: Color(0xFFEF4444),
-                    size: 20,
-                  ),
+                  Icon(Icons.restore, color: Color(0xFFEF4444), size: 20),
                   SizedBox(width: 8),
                   Text(
                     '학습 데이터 초기화',
@@ -569,10 +605,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 4),
               Text(
                 description,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF9CA3AF),
-                ),
+                style: const TextStyle(fontSize: 14, color: Color(0xFF9CA3AF)),
               ),
             ],
           ),
@@ -592,17 +625,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 16,
-            color: Color(0xFF374151),
-          ),
+          style: const TextStyle(fontSize: 16, color: Color(0xFF374151)),
         ),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 16,
-            color: Color(0xFF9CA3AF),
-          ),
+          style: const TextStyle(fontSize: 16, color: Color(0xFF9CA3AF)),
         ),
       ],
     );
@@ -622,11 +649,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('학습 데이터가 초기화되었습니다')),
-              );
+              _resetLearningData();
             },
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFEF4444)),
+            style:
+            TextButton.styleFrom(foregroundColor: const Color(0xFFEF4444)),
             child: const Text('초기화'),
           ),
         ],

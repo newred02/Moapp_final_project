@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/gradient_button.dart';
-import '../data/subjects_data.dart';
 import '../models/subject.dart';
 import '../services/speech_service.dart';
+import '../services/database_service.dart';
 import 'dart:math';
 
 class InterviewScreen extends StatefulWidget {
@@ -16,6 +16,10 @@ class InterviewScreen extends StatefulWidget {
 class _InterviewScreenState extends State<InterviewScreen>
     with TickerProviderStateMixin {
   String selectedType = '기술면접';
+
+  List<InterviewQuestion> _questions = [];
+  bool _isLoading = true;
+
   InterviewQuestion? currentQuestion;
   bool isRecording = false;
   late AnimationController _recordingController;
@@ -46,7 +50,25 @@ class _InterviewScreenState extends State<InterviewScreen>
         if (isRecording) _recordingController.forward();
       }
     });
-    _loadRandomQuestion();
+
+    _fetchQuestions();
+  }
+
+  Future<void> _fetchQuestions() async {
+    setState(() {
+      _isLoading = true;
+      _questions = [];
+    });
+
+    final questions = await DatabaseService().getInterviewQuestions(selectedType);
+
+    if (mounted) {
+      setState(() {
+        _questions = questions;
+        _isLoading = false;
+        _loadRandomQuestion();
+      });
+    }
   }
 
   @override
@@ -57,28 +79,29 @@ class _InterviewScreenState extends State<InterviewScreen>
   }
 
   void _loadRandomQuestion() {
-    final questions = selectedType == '기술면접'
-        ? technicalQuestions
-        : personalityQuestions;
+    if (_questions.isEmpty) {
+      setState(() {
+        currentQuestion = null;
+      });
+      return;
+    }
+
     final random = Random();
     setState(() {
-      currentQuestion = questions[random.nextInt(questions.length)];
+      currentQuestion = _questions[random.nextInt(_questions.length)];
       _recordedText = '';
       _isProcessingAnswer = false;
     });
   }
 
-  // TTS로 질문 읽기
   Future<void> _speakQuestion() async {
     if (currentQuestion != null) {
       await _speechService.speak(currentQuestion!.question);
     }
   }
 
-  // STT 토글 (녹음 시작/중지)
   Future<void> _toggleRecording() async {
     if (!_speechService.speechEnabled) {
-      // 권한이 없으면 권한 요청
       final granted = await _speechService.requestMicrophonePermission();
       if (!granted) {
         _showPermissionDialog();
@@ -87,7 +110,6 @@ class _InterviewScreenState extends State<InterviewScreen>
     }
 
     if (isRecording) {
-      // 녹음 중지
       await _speechService.stopListening();
       setState(() {
         isRecording = false;
@@ -96,7 +118,6 @@ class _InterviewScreenState extends State<InterviewScreen>
       _recordingController.stop();
       _recordingController.reset();
     } else {
-      // 녹음 시작
       setState(() {
         isRecording = true;
         _recordedText = '';
@@ -114,7 +135,6 @@ class _InterviewScreenState extends State<InterviewScreen>
     }
   }
 
-  // 권한 요청 다이얼로그
   void _showPermissionDialog() {
     showDialog(
       context: context,
@@ -144,7 +164,9 @@ class _InterviewScreenState extends State<InterviewScreen>
       width: double.infinity,
       height: double.infinity,
       color: const Color(0xFFF8FAFC),
-      child: SingleChildScrollView(
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,6 +175,7 @@ class _InterviewScreenState extends State<InterviewScreen>
             const SizedBox(height: 32),
             _buildInterviewTypeSelector(),
             const SizedBox(height: 32),
+
             if (currentQuestion != null) ...[
               _buildQuestionCard(),
               const SizedBox(height: 32),
@@ -163,6 +186,13 @@ class _InterviewScreenState extends State<InterviewScreen>
                 const SizedBox(height: 24),
               ],
               _buildActionButtons(),
+            ] else ...[
+              const Center(
+                child: Text(
+                  '등록된 질문이 없습니다.',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+              ),
             ],
           ],
         ),
@@ -274,10 +304,12 @@ class _InterviewScreenState extends State<InterviewScreen>
 
     return GestureDetector(
       onTap: () {
+        if (isSelected) return;
+
         setState(() {
           selectedType = type;
         });
-        _loadRandomQuestion();
+        _fetchQuestions();
       },
       child: Container(
         padding: const EdgeInsets.all(20),
@@ -334,6 +366,7 @@ class _InterviewScreenState extends State<InterviewScreen>
       ),
     );
   }
+
 
   Widget _buildQuestionCard() {
     return Container(
@@ -416,8 +449,8 @@ class _InterviewScreenState extends State<InterviewScreen>
                     style: IconButton.styleFrom(
                       backgroundColor: const Color(0xFF3B82F6).withOpacity(0.1),
                       foregroundColor: _speechService.isSpeaking
-                        ? Colors.grey
-                        : const Color(0xFF3B82F6),
+                          ? Colors.grey
+                          : const Color(0xFF3B82F6),
                     ),
                   );
                 },
@@ -431,8 +464,8 @@ class _InterviewScreenState extends State<InterviewScreen>
                     style: TextStyle(
                       fontSize: 14,
                       color: _speechService.isSpeaking
-                        ? const Color(0xFF3B82F6)
-                        : const Color(0xFF6B7280),
+                          ? const Color(0xFF3B82F6)
+                          : const Color(0xFF6B7280),
                     ),
                   );
                 },
@@ -445,6 +478,7 @@ class _InterviewScreenState extends State<InterviewScreen>
   }
 
   Widget _buildRecordingSection() {
+    // (기존 코드 그대로)
     return Column(
       children: [
         const Text(
@@ -512,6 +546,7 @@ class _InterviewScreenState extends State<InterviewScreen>
   }
 
   Widget _buildAnswerSection() {
+    // (기존 코드 그대로)
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),

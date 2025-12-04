@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/gradient_button.dart';
-import '../data/subjects_data.dart';
+import '../widgets/gradient_text.dart';
+import '../services/database_service.dart';
+import '../models/subject.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -56,7 +60,7 @@ class HomeScreen extends StatelessWidget {
           height: 80,
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+              colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
             ),
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
@@ -70,16 +74,23 @@ class HomeScreen extends StatelessWidget {
           child: const Icon(
             Icons.school,
             color: Colors.white,
-            size: 40,
+            size: 45,
           ),
         ),
         const SizedBox(height: 16),
-        const Text(
+        GradientText(
           'CS Interview',
+          gradient: const LinearGradient(
+            colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
             color: Color(0xFF1F2937),
+            fontFamily: 'Cursive',
+            fontStyle: FontStyle.italic,
           ),
         ),
         const Text(
@@ -258,51 +269,95 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildStudyProgress() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            offset: const Offset(0, 4),
-            blurRadius: 10,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '학습 진도 현황',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1F2937),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: subjectsData.map((subject) {
-              final colors = [
-                const Color(0xFF3B82F6), // 운영체제
-                const Color(0xFF10B981), // 네트워크
-                const Color(0xFFEF4444), // 데이터베이스
-                const Color(0xFFF59E0B), // 알고리즘
-              ];
-              final index = subjectsData.indexOf(subject);
-              return _buildProgressItem(
-                subject.name,
-                (subject.progress * 100).round(),
-                colors[index % colors.length]
-              );
-            }).toList(),
-          ),
-        ],
-      ),
+    final user = FirebaseAuth.instance.currentUser;
+    return StreamBuilder<List<Subject>>(
+      stream: DatabaseService().getSubjectsStream(),
+      builder: (context, subjectSnapshot) {
+        if (subjectSnapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (subjectSnapshot.hasError || !subjectSnapshot.hasData || subjectSnapshot.data!.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final originalSubjects = subjectSnapshot.data!;
+
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(user?.uid)
+              .collection('study_progress')
+              .snapshots(),
+          builder: (context, progressSnapshot) {
+
+            Map<String, double> progressMap = {};
+            if (progressSnapshot.hasData) {
+              for (var doc in progressSnapshot.data!.docs) {
+                final data = doc.data() as Map<String, dynamic>;
+                progressMap[doc.id] = (data['progress'] ?? 0.0).toDouble();
+              }
+            }
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    offset: const Offset(0, 4),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '학습 진도 현황',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1F2937),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: originalSubjects.map((subject) {
+                        final realProgress = progressMap[subject.id] ?? 0.0;
+                        final percent = (realProgress * 100).round();
+
+                        final colors = [
+                          const Color(0xFF3B82F6),
+                          const Color(0xFF10B981),
+                          const Color(0xFFEF4444),
+                          const Color(0xFFF59E0B),
+                        ];
+
+                        final index = originalSubjects.indexOf(subject);
+                        final color = colors[index % colors.length];
+
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 16.0),
+                          child: _buildProgressItem(
+                            subject.name,
+                            percent,
+                            color,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

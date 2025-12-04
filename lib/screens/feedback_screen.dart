@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/gradient_button.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/feedback_request.dart';
 
 class FeedbackScreen extends StatefulWidget {
   const FeedbackScreen({super.key});
@@ -14,6 +17,8 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _feedbackController = TextEditingController();
+
+  bool _isSubmitting = false;
 
   String selectedCategory = '기능 개선';
   String selectedEnvironment = 'Android';
@@ -36,6 +41,16 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _emailController.text = user.email ?? '';
+      _nameController.text = user.displayName ?? '';
+    }
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
@@ -43,11 +58,36 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     super.dispose();
   }
 
-  void _submitFeedback() {
-    if (_formKey.currentState!.validate()) {
-      // TODO: 실제 피드백 전송 로직 구현
+  Future<void> _submitFeedback() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+
+      final feedback = FeedbackRequest(
+        uid: user?.uid,
+        category: selectedCategory,
+        rating: rating,
+        environment: selectedEnvironment,
+        name: _nameController.text,
+        email: _emailController.text,
+        content: _feedbackController.text,
+      );
+
+      await FirebaseFirestore.instance
+          .collection('feedbacks')
+          .add(feedback.toMap());
+
+      if (!mounted) return;
+
+      // 성공 다이얼로그
       showDialog(
         context: context,
+        barrierDismissible: false,
         builder: (context) => AlertDialog(
           title: const Text('피드백 전송 완료'),
           content: const Text('소중한 의견 감사합니다!\n더 나은 앱이 되도록 반영하겠습니다.'),
@@ -62,6 +102,19 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           ],
         ),
       );
+    } catch (e) {
+      // 에러 발생 시
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('전송 실패: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
     }
   }
 
@@ -491,6 +544,10 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   }
 
   Widget _buildSubmitButton() {
+    if (_isSubmitting) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return GradientButton(
       text: '피드백 제출하기',
       onPressed: _submitFeedback,

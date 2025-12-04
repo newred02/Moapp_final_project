@@ -3,6 +3,12 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  app_links
+  cloud_firestore
+  desktop_webview_auth
+  firebase_auth
+  firebase_core
+  firebase_storage
   flutter_tts
   permission_handler_windows
   speech_to_text_windows

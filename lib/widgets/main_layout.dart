@@ -1,16 +1,17 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../data/subjects_data.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'gradient_text.dart';
+import '../models/subject.dart';
+import '../services/database_service.dart';
 
 class MainLayout extends StatefulWidget {
   final Widget child;
   final String currentPath;
 
-  const MainLayout({
-    super.key,
-    required this.child,
-    required this.currentPath,
-  });
+  const MainLayout({super.key, required this.child, required this.currentPath});
 
   @override
   State<MainLayout> createState() => _MainLayoutState();
@@ -26,16 +27,28 @@ class _MainLayoutState extends State<MainLayout> {
     return 0;
   }
 
-  double _getOverallProgress() {
-    final totalProgress = subjectsData.fold<double>(
-      0.0,
-      (sum, subject) => sum + subject.progress,
-    );
-    return totalProgress / subjectsData.length;
+  Future<void> _handleLogout() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      await GoogleSignIn().signOut();
+
+      if (mounted) {
+        context.go('/');
+      }
+    } catch (e) {
+      debugPrint('로그아웃 실패: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('로그아웃 중 오류가 발생했습니다.')));
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       key: _scaffoldKey,
       appBar: PreferredSize(
@@ -56,7 +69,6 @@ class _MainLayoutState extends State<MainLayout> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  // 앱 로고/아이콘
                   Container(
                     width: 32,
                     height: 32,
@@ -69,26 +81,27 @@ class _MainLayoutState extends State<MainLayout> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
-                      Icons.psychology,
+                      Icons.school,
                       color: Colors.white,
-                      size: 20,
+                      size: 18,
                     ),
                   ),
                   const SizedBox(width: 12),
-
-                  // 앱 제목
-                  const Text(
+                  GradientText(
                     'CS Interview',
-                    style: TextStyle(
-                      fontSize: 20,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    style: const TextStyle(
+                      fontSize: 25,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF1F2937),
+                      fontFamily: 'Cursive',
+                      fontStyle: FontStyle.italic,
                     ),
                   ),
-
                   const Spacer(),
-
-                  // 햄버거 메뉴 버튼
                   IconButton(
                     icon: const Icon(
                       Icons.menu,
@@ -110,9 +123,7 @@ class _MainLayoutState extends State<MainLayout> {
           color: const Color(0xFFFAFAFA),
           child: Column(
             children: [
-              // 드로어 헤더
               Container(
-                height: 200,
                 width: double.infinity,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -127,37 +138,69 @@ class _MainLayoutState extends State<MainLayout> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const CircleAvatar(
+                        CircleAvatar(
                           radius: 30,
                           backgroundColor: Colors.white24,
-                          child: Icon(
-                            Icons.person,
-                            size: 35,
-                            color: Colors.white,
-                          ),
+                          backgroundImage: user?.photoURL != null
+                              ? NetworkImage(user!.photoURL!)
+                              : null,
+                          child: user?.photoURL == null
+                              ? const Icon(
+                                  Icons.person,
+                                  size: 35,
+                                  color: Colors.white,
+                                )
+                              : null,
                         ),
                         const SizedBox(height: 16),
-                        const Text(
-                          '면접 준비생',
-                          style: TextStyle(
+                        Text(
+                          user?.displayName ?? '면접 준비생',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          '학습진도: ${(_getOverallProgress() * 100).round()}%',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        LinearProgressIndicator(
-                          value: _getOverallProgress(),
-                          backgroundColor: Colors.white24,
-                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+
+                        StreamBuilder<List<Subject>>(
+                          stream: DatabaseService().getSubjectsStream(),
+                          builder: (context, subjectSnapshot) {
+                            if (!subjectSnapshot.hasData ||
+                                subjectSnapshot.data!.isEmpty) {
+                              return _buildProgressIndicator(0.0);
+                            }
+
+                            final subjects = subjectSnapshot.data!;
+
+                            return StreamBuilder<QuerySnapshot>(
+                              stream: FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(user?.uid)
+                                  .collection('study_progress')
+                                  .snapshots(),
+                              builder: (context, progressSnapshot) {
+                                double overallProgress = 0.0;
+
+                                if (progressSnapshot.hasData) {
+                                  Map<String, double> progressMap = {};
+                                  for (var doc in progressSnapshot.data!.docs) {
+                                    final data =
+                                        doc.data() as Map<String, dynamic>;
+                                    progressMap[doc.id] =
+                                        (data['progress'] ?? 0.0).toDouble();
+                                  }
+                                  double totalSum = 0.0;
+                                  for (var subject in subjects) {
+                                    totalSum += progressMap[subject.id] ?? 0.0;
+                                  }
+                                  overallProgress = totalSum / subjects.length;
+                                }
+
+                                return _buildProgressIndicator(overallProgress);
+                              },
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -165,7 +208,6 @@ class _MainLayoutState extends State<MainLayout> {
                 ),
               ),
 
-              // 메뉴 항목들
               Expanded(
                 child: ListView(
                   padding: EdgeInsets.zero,
@@ -210,11 +252,15 @@ class _MainLayoutState extends State<MainLayout> {
                         context.go('/feedback');
                       },
                     ),
+                    _buildDrawerItem(
+                      icon: Icons.logout,
+                      title: '로그아웃',
+                      onTap: _handleLogout,
+                    ),
                   ],
                 ),
               ),
 
-              // 하단 정보
               Container(
                 padding: const EdgeInsets.all(20),
                 child: const Column(
@@ -231,10 +277,7 @@ class _MainLayoutState extends State<MainLayout> {
                     ),
                     Text(
                       '© 2025 All rights reserved',
-                      style: TextStyle(
-                        color: Color(0xFF9CA3AF),
-                        fontSize: 10,
-                      ),
+                      style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 10),
                     ),
                   ],
                 ),
@@ -278,21 +321,30 @@ class _MainLayoutState extends State<MainLayout> {
           selectedFontSize: 12,
           unselectedFontSize: 12,
           items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: '홈',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.book),
-              label: '학습',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.mic),
-              label: '면접',
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
+            BottomNavigationBarItem(icon: Icon(Icons.book), label: '학습'),
+            BottomNavigationBarItem(icon: Icon(Icons.mic), label: '면접'),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildProgressIndicator(double progress) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '학습진도: ${(progress * 100).round()}%',
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        const SizedBox(height: 8),
+        LinearProgressIndicator(
+          value: progress,
+          backgroundColor: Colors.white24,
+          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+        ),
+      ],
     );
   }
 
@@ -302,11 +354,7 @@ class _MainLayoutState extends State<MainLayout> {
     required VoidCallback onTap,
   }) {
     return ListTile(
-      leading: Icon(
-        icon,
-        color: const Color(0xFF6B7280),
-        size: 22,
-      ),
+      leading: Icon(icon, color: const Color(0xFF6B7280), size: 22),
       title: Text(
         title,
         style: const TextStyle(

@@ -5,7 +5,7 @@ class ProgressRing extends StatefulWidget {
   final double progress;
   final double size;
   final double strokeWidth;
-  final Color progressColor;
+  final Gradient progressColor;
   final Color backgroundColor;
   final Widget? child;
 
@@ -14,8 +14,15 @@ class ProgressRing extends StatefulWidget {
     required this.progress,
     this.size = 80,
     this.strokeWidth = 6,
-    this.progressColor = const Color(0xFF3B82F6),
-    this.backgroundColor = const Color(0xFFE5E7EB),
+    this.progressColor =const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFF3BB2F6),
+          Color(0xFF9333EA),
+        ]
+    ),
+    this.backgroundColor = Colors.white,
     this.child,
   });
 
@@ -35,14 +42,38 @@ class _ProgressRingState extends State<ProgressRing>
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
+
+    _setAnimation(begin: 0.0, end: widget.progress);
+    _animationController.forward();
+  }
+
+  void _setAnimation({required double begin, required double end}) {
     _animation = Tween<double>(
-      begin: 0,
-      end: widget.progress,
+      begin: begin,
+      end: end,
     ).animate(CurvedAnimation(
       parent: _animationController,
       curve: Curves.easeInOut,
     ));
-    _animationController.forward();
+  }
+
+  @override
+  void didUpdateWidget(ProgressRing oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.progress != widget.progress) {
+      double beginValue = 0.0;
+      try {
+        beginValue = _animation.value;
+      } catch (e) {
+        beginValue = oldWidget.progress;
+      }
+
+      _setAnimation(begin: beginValue, end: widget.progress);
+
+      _animationController.reset();
+      _animationController.forward();
+    }
   }
 
   @override
@@ -87,7 +118,7 @@ class _ProgressRingState extends State<ProgressRing>
 class _ProgressRingPainter extends CustomPainter {
   final double progress;
   final double strokeWidth;
-  final Color progressColor;
+  final Gradient progressColor;
   final Color backgroundColor;
 
   _ProgressRingPainter({
@@ -102,6 +133,8 @@ class _ProgressRingPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = (size.width - strokeWidth) / 2;
 
+    final Rect rect = Rect.fromCircle(center: center, radius: radius);
+
     final backgroundPaint = Paint()
       ..color = backgroundColor
       ..strokeCap = StrokeCap.round
@@ -109,7 +142,7 @@ class _ProgressRingPainter extends CustomPainter {
       ..strokeWidth = strokeWidth;
 
     final progressPaint = Paint()
-      ..color = progressColor
+      ..shader = progressColor.createShader(rect)
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth;

@@ -1,44 +1,93 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/progress_ring.dart';
-import '../data/subjects_data.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../models/subject.dart';
+import '../services/database_service.dart';
 
 class StudyScreen extends StatelessWidget {
   const StudyScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: const Color(0xFFF8FAFC),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildOverallProgress(),
-            const SizedBox(height: 32),
-            const Text(
-              '과목별 학습',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1F2937),
+    final user = FirebaseAuth.instance.currentUser;
+
+    // 과목 목록 가져오기
+    return StreamBuilder<List<Subject>>(
+      stream: DatabaseService().getSubjectsStream(),
+      builder: (context, subjectSnapshot) {
+        if (subjectSnapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (subjectSnapshot.hasError) {
+          return Center(child: Text('오류: ${subjectSnapshot.error}'));
+        }
+        if (!subjectSnapshot.hasData || subjectSnapshot.data!.isEmpty) {
+          return const Center(child: Text('등록된 과목이 없습니다.'));
+        }
+
+        final subjects = subjectSnapshot.data!;
+
+        // 내 진도율 가져오기
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(user?.uid)
+              .collection('study_progress')
+              .snapshots(),
+          builder: (context, progressSnapshot) {
+            Map<String, double> progressMap = {};
+            if (progressSnapshot.hasData) {
+              for (var doc in progressSnapshot.data!.docs) {
+                final data = doc.data() as Map<String, dynamic>;
+                progressMap[doc.id] = (data['progress'] ?? 0.0).toDouble();
+              }
+            }
+
+            return Container(
+              width: double.infinity,
+              height: double.infinity,
+              color: const Color(0xFFF8FAFC),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildOverallProgress(subjects, progressMap),
+                    const SizedBox(height: 32),
+                    const Text(
+                      '과목별 학습',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1F2937),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildSubjectCards(context, subjects, progressMap),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            _buildSubjectCards(context),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildOverallProgress() {
-    double averageProgress = subjectsData
-        .map((subject) => subject.progress)
-        .reduce((a, b) => a + b) / subjectsData.length;
+  Widget _buildOverallProgress(List<Subject> subjects,
+      Map<String, double> progressMap) {
+    if (subjects.isEmpty) return const SizedBox.shrink();
+
+    double totalProgress = subjects.fold(0.0, (sum, subject) {
+      return sum + (progressMap[subject.id] ?? 0.0);
+    });
+
+    double averageProgress = totalProgress / subjects.length;
+    int completedCount = subjects
+        .where((s) => (progressMap[s.id] ?? 0.0) >= 1.0)
+        .length;
 
     return Container(
       width: double.infinity,
@@ -92,7 +141,7 @@ class StudyScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            '${subjectsData.length}개 과목 중 ${subjectsData.where((s) => s.progress >= 1.0).length}개 완료',
+            '${subjects.length}개 과목 중 $completedCount개 완료',
             style: const TextStyle(
               fontSize: 16,
               color: Color(0xFF6B7280),
@@ -103,20 +152,34 @@ class StudyScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSubjectCards(BuildContext context) {
+  Widget _buildSubjectCards(BuildContext context,
+      List<Subject> subjects,
+      Map<String, double> progressMap) {
     return Column(
-      children: subjectsData.map((subject) {
+      children: subjects.map((subject) {
+        final double myProgress = progressMap[subject.id] ?? 0.0;
+
         return Padding(
           padding: const EdgeInsets.only(bottom: 16),
-          child: _buildSubjectCard(context, subject),
+          child: _buildSubjectCard(context, subject, myProgress),
         );
       }).toList(),
     );
   }
 
-  Widget _buildSubjectCard(BuildContext context, subject) {
+  Widget _buildSubjectCard(BuildContext context, Subject subject, double progress) {
+    final Map<String, Color> subjectColors = {
+      '알고리즘': const Color(0xFF3B82F6),
+      '데이터베이스': const Color(0xFF10B981),
+      '네트워크': const Color(0xFFEF4444),
+      '운영체제': const Color(0xFFF59E0B),
+    };
+
+    final Color themeColor = subjectColors[subject.name] ?? const Color(0xFF3B82F6);
+    final Color darkerThemeColor = Color.lerp(themeColor, Colors.black, 0.2)!;
+
     return GestureDetector(
-      onTap: () => context.push('/study/${subject.id}'),
+      onTap: () => context.push('/study/${subject.id}', extra: subject),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(20),
@@ -140,12 +203,12 @@ class StudyScreen extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF3B82F6).withOpacity(0.1),
+                    color: themeColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     subject.icon,
-                    color: const Color(0xFF3B82F6),
+                    color: themeColor,
                     size: 24,
                   ),
                 ),
@@ -165,6 +228,8 @@ class StudyScreen extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         subject.description,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 14,
                           color: Color(0xFF6B7280),
@@ -195,24 +260,40 @@ class StudyScreen extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${(subject.progress * 100).round()}%',
-                      style: const TextStyle(
+                      '${(progress * 100).round()}%',
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF3B82F6),
+                        color: themeColor,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: subject.progress,
-                  backgroundColor: const Color(0xFFE5E7EB),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFF3B82F6),
+                Container(
+                  height: 6,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE5E7EB),
+                    borderRadius: BorderRadius.circular(3),
                   ),
-                  minHeight: 6,
-                  borderRadius: BorderRadius.circular(3),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: progress.clamp(0.0, 1.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(3),
+                        gradient: LinearGradient(
+                          colors: [
+                            themeColor.withOpacity(0.6),
+                            themeColor,
+                          ],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -221,15 +302,21 @@ class StudyScreen extends StatelessWidget {
               width: double.infinity,
               height: 44,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+                gradient: LinearGradient(
+                  colors: [
+                    themeColor,
+                    darkerThemeColor,
+                  ],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
                 ),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: () => context.push('/study/${subject.id}'),
+                  onTap: () =>
+                      context.push('/study/${subject.id}', extra: subject),
                   borderRadius: BorderRadius.circular(12),
                   child: const Center(
                     child: Text(
