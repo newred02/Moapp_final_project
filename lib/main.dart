@@ -44,7 +44,7 @@ class CSInterviewApp extends StatelessWidget {
         return '/';
       }
 
-      return null; // 원래 가려던 곳으로 이동
+      return null;
     },
     routes: [
       GoRoute(

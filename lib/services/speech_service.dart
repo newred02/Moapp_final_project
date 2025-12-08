@@ -120,6 +120,8 @@ class SpeechService extends ChangeNotifier {
           notifyListeners();
         },
         localeId: _currentLocale,
+        listenFor: Duration(minutes: 10),
+        pauseFor: const Duration(seconds: 10),
         listenOptions: SpeechListenOptions(
           cancelOnError: false,
           partialResults: true,

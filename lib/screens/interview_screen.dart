@@ -29,10 +29,19 @@ class _InterviewScreenState extends State<InterviewScreen>
   String _recordedText = '';
   bool _isProcessingAnswer = false;
 
+  String? _currentTtsTarget;
+
   @override
   void initState() {
     super.initState();
     _speechService = SpeechService();
+    _speechService.addListener(() {
+      if (!_speechService.isSpeaking && _currentTtsTarget != null && mounted) {
+        setState(() {
+          _currentTtsTarget = null;
+        });
+      }
+    });
     _recordingController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
@@ -60,7 +69,9 @@ class _InterviewScreenState extends State<InterviewScreen>
       _questions = [];
     });
 
-    final questions = await DatabaseService().getInterviewQuestions(selectedType);
+    final questions = await DatabaseService().getInterviewQuestions(
+      selectedType,
+    );
 
     if (mounted) {
       setState(() {
@@ -96,7 +107,19 @@ class _InterviewScreenState extends State<InterviewScreen>
 
   Future<void> _speakQuestion() async {
     if (currentQuestion != null) {
+      setState(() {
+        _currentTtsTarget = 'question';
+      });
       await _speechService.speak(currentQuestion!.question);
+    }
+  }
+
+  Future<void> _speakAnswer() async {
+    if (_recordedText.isNotEmpty) {
+      setState(() {
+        _currentTtsTarget = 'answer';
+      });
+      await _speechService.speak(_recordedText);
     }
   }
 
@@ -167,36 +190,36 @@ class _InterviewScreenState extends State<InterviewScreen>
       child: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildFeatureBanner(),
-            const SizedBox(height: 32),
-            _buildInterviewTypeSelector(),
-            const SizedBox(height: 32),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildFeatureBanner(),
+                  const SizedBox(height: 32),
+                  _buildInterviewTypeSelector(),
+                  const SizedBox(height: 32),
 
-            if (currentQuestion != null) ...[
-              _buildQuestionCard(),
-              const SizedBox(height: 32),
-              _buildRecordingSection(),
-              const SizedBox(height: 24),
-              if (_recordedText.isNotEmpty || _isProcessingAnswer) ...[
-                _buildAnswerSection(),
-                const SizedBox(height: 24),
-              ],
-              _buildActionButtons(),
-            ] else ...[
-              const Center(
-                child: Text(
-                  '등록된 질문이 없습니다.',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
+                  if (currentQuestion != null) ...[
+                    _buildQuestionCard(),
+                    const SizedBox(height: 32),
+                    _buildRecordingSection(),
+                    const SizedBox(height: 24),
+                    if (_recordedText.isNotEmpty || _isProcessingAnswer) ...[
+                      _buildAnswerSection(),
+                      const SizedBox(height: 24),
+                    ],
+                    _buildActionButtons(),
+                  ] else ...[
+                    const Center(
+                      child: Text(
+                        '등록된 질문이 없습니다.',
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ],
-        ),
-      ),
+            ),
     );
   }
 
@@ -230,11 +253,7 @@ class _InterviewScreenState extends State<InterviewScreen>
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.mic,
-                  color: Colors.white,
-                  size: 20,
-                ),
+                child: const Icon(Icons.mic, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 12),
               const Text(
@@ -250,11 +269,7 @@ class _InterviewScreenState extends State<InterviewScreen>
           const SizedBox(height: 12),
           const Text(
             '음성 인식으로 자동 답변 기록\n음성 합성으로 질문 읽어주기',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              height: 1.5,
-            ),
+            style: TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
           ),
         ],
       ),
@@ -299,7 +314,12 @@ class _InterviewScreenState extends State<InterviewScreen>
     );
   }
 
-  Widget _buildTypeCard(String type, String description, IconData icon, Color color) {
+  Widget _buildTypeCard(
+    String type,
+    String description,
+    IconData icon,
+    Color color,
+  ) {
     final isSelected = selectedType == type;
 
     return GestureDetector(
@@ -355,10 +375,7 @@ class _InterviewScreenState extends State<InterviewScreen>
             const SizedBox(height: 4),
             Text(
               description,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF6B7280),
-              ),
+              style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
               textAlign: TextAlign.center,
             ),
           ],
@@ -366,7 +383,6 @@ class _InterviewScreenState extends State<InterviewScreen>
       ),
     );
   }
-
 
   Widget _buildQuestionCard() {
     return Container(
@@ -390,7 +406,10 @@ class _InterviewScreenState extends State<InterviewScreen>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: selectedType == '기술면접'
                       ? const Color(0xFF3B82F6).withOpacity(0.1)
@@ -409,7 +428,10 @@ class _InterviewScreenState extends State<InterviewScreen>
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF59E0B).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -441,14 +463,17 @@ class _InterviewScreenState extends State<InterviewScreen>
               AnimatedBuilder(
                 animation: _speechService,
                 builder: (context, child) {
+                  final isReadingQuestion =
+                      _speechService.isSpeaking &&
+                      _currentTtsTarget == 'question';
                   return IconButton(
-                    onPressed: _speechService.isSpeaking ? null : _speakQuestion,
+                    onPressed: isReadingQuestion ? null : _speakQuestion,
                     icon: Icon(
-                      _speechService.isSpeaking ? Icons.volume_off : Icons.volume_up,
+                      isReadingQuestion ? Icons.volume_off : Icons.volume_up,
                     ),
                     style: IconButton.styleFrom(
                       backgroundColor: const Color(0xFF3B82F6).withOpacity(0.1),
-                      foregroundColor: _speechService.isSpeaking
+                      foregroundColor: isReadingQuestion
                           ? Colors.grey
                           : const Color(0xFF3B82F6),
                     ),
@@ -459,11 +484,14 @@ class _InterviewScreenState extends State<InterviewScreen>
               AnimatedBuilder(
                 animation: _speechService,
                 builder: (context, child) {
+                  final isReadingQuestion =
+                      _speechService.isSpeaking &&
+                      _currentTtsTarget == 'question';
                   return Text(
-                    _speechService.isSpeaking ? '질문 읽는 중...' : '질문 듣기',
+                    isReadingQuestion ? '질문 읽는 중...' : '질문 듣기',
                     style: TextStyle(
                       fontSize: 14,
-                      color: _speechService.isSpeaking
+                      color: isReadingQuestion
                           ? const Color(0xFF3B82F6)
                           : const Color(0xFF6B7280),
                     ),
@@ -478,7 +506,6 @@ class _InterviewScreenState extends State<InterviewScreen>
   }
 
   Widget _buildRecordingSection() {
-    // (기존 코드 그대로)
     return Column(
       children: [
         const Text(
@@ -506,15 +533,23 @@ class _InterviewScreenState extends State<InterviewScreen>
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: isRecording
-                              ? [const Color(0xFFEF4444), const Color(0xFFDC2626)]
-                              : [const Color(0xFF3B82F6), const Color(0xFF1D4ED8)],
+                              ? [
+                                  const Color(0xFFEF4444),
+                                  const Color(0xFFDC2626),
+                                ]
+                              : [
+                                  const Color(0xFF3B82F6),
+                                  const Color(0xFF1D4ED8),
+                                ],
                         ),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: (isRecording
-                                ? const Color(0xFFEF4444)
-                                : const Color(0xFF3B82F6)).withOpacity(0.3),
+                            color:
+                                (isRecording
+                                        ? const Color(0xFFEF4444)
+                                        : const Color(0xFF3B82F6))
+                                    .withOpacity(0.3),
                             offset: const Offset(0, 8),
                             blurRadius: 20,
                           ),
@@ -537,7 +572,9 @@ class _InterviewScreenState extends State<InterviewScreen>
           isRecording ? '녹음 중... 탭하여 중지' : '탭하여 녹음 시작',
           style: TextStyle(
             fontSize: 14,
-            color: isRecording ? const Color(0xFFEF4444) : const Color(0xFF6B7280),
+            color: isRecording
+                ? const Color(0xFFEF4444)
+                : const Color(0xFF6B7280),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -546,7 +583,6 @@ class _InterviewScreenState extends State<InterviewScreen>
   }
 
   Widget _buildAnswerSection() {
-    // (기존 코드 그대로)
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -567,7 +603,10 @@ class _InterviewScreenState extends State<InterviewScreen>
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF10B981).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -583,15 +622,41 @@ class _InterviewScreenState extends State<InterviewScreen>
               ),
               const Spacer(),
               if (_recordedText.isNotEmpty)
-                IconButton(
-                  onPressed: () async {
-                    await _speechService.speak(_recordedText);
+                AnimatedBuilder(
+                  animation: _speechService,
+                  builder: (context, child) {
+                    final isReadingAnswer =
+                        _speechService.isSpeaking &&
+                        _currentTtsTarget == 'answer';
+
+                    return Row(
+                      children: [
+                        if (isReadingAnswer)
+                          const Text(
+                            '답변 듣는 중...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF10B981),
+                            ),
+                          ),
+                        IconButton(
+                          onPressed: isReadingAnswer ? null : _speakAnswer,
+                          icon: Icon(
+                            isReadingAnswer
+                                ? Icons.stop_circle_outlined
+                                : Icons.volume_up,
+                            size: 20,
+                          ),
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color(
+                              0xFF10B981,
+                            ).withOpacity(0.1),
+                            foregroundColor: const Color(0xFF10B981),
+                          ),
+                        ),
+                      ],
+                    );
                   },
-                  icon: const Icon(Icons.volume_up, size: 20),
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981).withOpacity(0.1),
-                    foregroundColor: const Color(0xFF10B981),
-                  ),
                 ),
             ],
           ),
@@ -608,17 +673,16 @@ class _InterviewScreenState extends State<InterviewScreen>
           else if (_recordedText.isEmpty && _isProcessingAnswer)
             const Text(
               '답변을 다시 녹음해주세요.',
-              style: TextStyle(
-                fontSize: 16,
-                color: Color(0xFFEF4444),
-              ),
+              style: TextStyle(fontSize: 16, color: Color(0xFFEF4444)),
             )
           else
             Text(
               _recordedText.isEmpty ? '아직 답변이 녹음되지 않았습니다.' : _recordedText,
               style: TextStyle(
                 fontSize: 16,
-                color: _recordedText.isEmpty ? const Color(0xFF6B7280) : const Color(0xFF374151),
+                color: _recordedText.isEmpty
+                    ? const Color(0xFF6B7280)
+                    : const Color(0xFF374151),
                 height: 1.5,
               ),
             ),
@@ -662,10 +726,7 @@ class _InterviewScreenState extends State<InterviewScreen>
             child: const Center(
               child: Text(
                 '답변을 녹음한 후 피드백을 받을 수 있습니다',
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: Colors.grey, fontSize: 14),
               ),
             ),
           ),
