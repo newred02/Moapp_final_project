@@ -145,13 +145,13 @@ class SpeechService extends ChangeNotifier {
 
   // 음성 합성 (TTS)
   Future<void> speak(String text) async {
-    if (text.isEmpty || _isSpeaking) return;
+    if (text.isEmpty) return;
 
     try {
-      // 현재 재생 중인 음성이 있으면 중지
-      await _flutterTts.stop();
+      if (_isSpeaking) {
+        await _flutterTts.stop();
+      }
 
-      // 텍스트 음성 변환
       await _flutterTts.speak(text);
     } catch (e) {
       _isSpeaking = false;
@@ -192,6 +192,12 @@ class SpeechService extends ChangeNotifier {
       await _flutterTts.setPitch(_pitch);
     }
 
+    notifyListeners();
+  }
+
+  Future<void> setSpeed(double speed) async {
+    _speechRate = speed;
+    await _flutterTts.setSpeechRate(speed);
     notifyListeners();
   }
 

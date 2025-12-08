@@ -5,6 +5,7 @@ import '../models/subject.dart';
 import '../services/speech_service.dart';
 import '../services/database_service.dart';
 import 'dart:math';
+import '../services/firestore_settings_service.dart';
 
 class InterviewScreen extends StatefulWidget {
   const InterviewScreen({super.key});
@@ -28,7 +29,9 @@ class _InterviewScreenState extends State<InterviewScreen>
   late SpeechService _speechService;
   String _recordedText = '';
   bool _isProcessingAnswer = false;
-
+  double _ttsSpeed = 0.6;
+  bool _enableVoiceFeedback = true;
+  final _settingsService = FirestoreSettingsService();
   String? _currentTtsTarget;
 
   @override
@@ -60,7 +63,20 @@ class _InterviewScreenState extends State<InterviewScreen>
       }
     });
 
+    _applySettings();
     _fetchQuestions();
+  }
+
+  // Firestore에 저장된 설정 적용
+  Future<void> _applySettings() async {
+    final settings = await _settingsService.getSettings();
+
+    if (mounted) {
+      setState(() {
+        _ttsSpeed = (settings['speechSpeed'] as num?)?.toDouble() ?? 0.6;
+        _enableVoiceFeedback = (settings['voiceFeedback'] as bool?) ?? true;
+      });
+    }
   }
 
   Future<void> _fetchQuestions() async {
@@ -107,6 +123,7 @@ class _InterviewScreenState extends State<InterviewScreen>
 
   Future<void> _speakQuestion() async {
     if (currentQuestion != null) {
+      await _speechService.setSpeed(_ttsSpeed);
       setState(() {
         _currentTtsTarget = 'question';
       });
@@ -115,7 +132,11 @@ class _InterviewScreenState extends State<InterviewScreen>
   }
 
   Future<void> _speakAnswer() async {
+    if (!_enableVoiceFeedback) return;
+
     if (_recordedText.isNotEmpty) {
+      await _speechService.setSpeed(_ttsSpeed);
+
       setState(() {
         _currentTtsTarget = 'answer';
       });

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/firestore_settings_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -10,6 +11,9 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final _settingsService = FirestoreSettingsService();
+  bool _isLoading = true;
+
   // 음성 설정
   double _speechSpeed = 0.6;
   bool _voiceFeedback = true;
@@ -22,6 +26,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // 알림 설정
   bool _pushNotification = true;
   bool _soundEffect = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  // Firestore에서 설정값 불러오기
+  Future<void> _loadSettings() async {
+    final settings = await _settingsService.getSettings();
+
+    if (mounted) {
+      setState(() {
+        _speechSpeed = (settings['speechSpeed'] as num?)?.toDouble() ?? 0.6;
+        _voiceFeedback = (settings['voiceFeedback'] as bool?) ?? true;
+
+        _autoSaveProgress = (settings['autoSaveProgress'] as bool?) ?? true;
+        _dailyGoal = (settings['dailyGoal'] as int?) ?? 30;
+        _studyReminder = (settings['studyReminder'] as bool?) ?? true;
+
+        _pushNotification = (settings['pushNotification'] as bool?) ?? true;
+        _soundEffect = (settings['soundEffect'] as bool?) ?? true;
+
+        _isLoading = false;
+      });
+    }
+  }
+
+  // 설정 변경 시 Firestore에 즉시 저장
+  void _updateSetting(String key, dynamic value) {
+    setState(() {
+      if (key == 'speechSpeed') _speechSpeed = value;
+      if (key == 'voiceFeedback') _voiceFeedback = value;
+      if (key == 'autoSaveProgress') _autoSaveProgress = value;
+      if (key == 'dailyGoal') _dailyGoal = value;
+      if (key == 'studyReminder') _studyReminder = value;
+      if (key == 'pushNotification') _pushNotification = value;
+      if (key == 'soundEffect') _soundEffect = value;
+    });
+
+    _settingsService.updateSetting(key, value);
+  }
 
   Future<void> _resetLearningData() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -44,7 +90,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // 컬렉션 안의 모든 문서 가져오기
       final snapshots = await progressRef.get();
 
-      // Batch를 사용하여 한 번에 삭제 (효율적)
       WriteBatch batch = firestore.batch();
       for (var doc in snapshots.docs) {
         batch.delete(doc.reference);
@@ -66,15 +111,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // 에러 메시지
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('초기화 실패: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('초기화 실패: $e')),
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return Container(
       width: double.infinity,
       height: double.infinity,
@@ -187,6 +235,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _speechSpeed = value;
                 });
               },
+              // 드래그가 끝났을 때만 Firestore에 저장
+              onChangeEnd: (value) {
+                _updateSetting('speechSpeed', value);
+              },
             ),
           ),
           const Row(
@@ -213,11 +265,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: '음성 피드백',
             description: '답변 후 음성으로 피드백 제공',
             value: _voiceFeedback,
-            onChanged: (value) {
-              setState(() {
-                _voiceFeedback = value;
-              });
-            },
+            // _updateSetting 사용
+            onChanged: (value) => _updateSetting('voiceFeedback', value),
           ),
         ],
       ),
@@ -275,11 +324,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: '자동 진도 저장',
             description: '학습 진도를 자동으로 저장',
             value: _autoSaveProgress,
-            onChanged: (value) {
-              setState(() {
-                _autoSaveProgress = value;
-              });
-            },
+            onChanged: (value) => _updateSetting('autoSaveProgress', value),
           ),
           const SizedBox(height: 20),
 
@@ -332,9 +377,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   }).toList(),
                   onChanged: (value) {
                     if (value != null) {
-                      setState(() {
-                        _dailyGoal = value;
-                      });
+                      _updateSetting('dailyGoal', value);
                     }
                   },
                 ),
@@ -348,11 +391,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: '학습 리마인더',
             description: '설정한 시간에 학습 알림',
             value: _studyReminder,
-            onChanged: (value) {
-              setState(() {
-                _studyReminder = value;
-              });
-            },
+            onChanged: (value) => _updateSetting('studyReminder', value),
           ),
         ],
       ),
@@ -409,11 +448,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: '푸시 알림',
             description: '앱 알림 수신 허용',
             value: _pushNotification,
-            onChanged: (value) {
-              setState(() {
-                _pushNotification = value;
-              });
-            },
+            onChanged: (value) => _updateSetting('pushNotification', value),
           ),
           const SizedBox(height: 20),
 
@@ -421,11 +456,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: '효과음',
             description: '퀴즈 정답/오답 효과음',
             value: _soundEffect,
-            onChanged: (value) {
-              setState(() {
-                _soundEffect = value;
-              });
-            },
+            onChanged: (value) => _updateSetting('soundEffect', value),
           ),
         ],
       ),
@@ -477,17 +508,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 24),
-
           _buildInfoRow('버전', 'v1.0.0'),
           const SizedBox(height: 16),
           _buildInfoRow('마지막 업데이트', '2025.12.05'),
           const SizedBox(height: 16),
-
           GestureDetector(
             onTap: () {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('최신 버전입니다')));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('최신 버전입니다')),
+              );
             },
             child: Container(
               width: double.infinity,
